@@ -122,13 +122,7 @@ Wires all of the above modules together into a single synthesizable design, mana
 
 ---
 
-## 🚧 Future Work
 
-- [ ] Replace XOR reduction with a stronger entropy mixer (e.g., LFSR or hash-based)
-- [ ] Increase RO count for higher entropy throughput
-- [ ] Add configurable output word width via top-level parameter
-- [ ] Formal verification of Von Neumann corrector output distribution
-- [ ] NIST SP 800-90B statistical test suite integration for output validation
 
 ---
 
