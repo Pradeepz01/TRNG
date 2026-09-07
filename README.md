@@ -141,13 +141,13 @@ Wires all pipeline modules together into a complete synthesizable Tiny Tapeout d
 
 ### Running the Testbench (Icarus Verilog)
 ```bash
-iverilog -g2012 -DSIMULATION -o tb_trng.vvp rtl/*.v test/tb_trng.v
+iverilog -g2012 -DSIMULATION -o tb_trng.vvp rtl/project.v test/tb_trng.v
 vvp tb_trng.vvp
 ```
 
 ### Checking ASIC Synthesis (Yosys)
 ```bash
-yosys -p "read_liberty -lib /home/pradeep/vsd/OpenLane/pdks/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib; read_verilog rtl/*.v; synth -top tt_um_pradeepz01_trng; check -assert; stat"
+yosys -p "read_liberty -lib /home/pradeep/vsd/OpenLane/pdks/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib; read_verilog rtl/project.v; synth -top tt_um_pradeepz01_trng; check -assert; stat"
 ```
 
 ---
