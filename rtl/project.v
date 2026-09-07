@@ -77,7 +77,7 @@ endmodule
 
 
 // ==============================================================================
-// 2. Ring Oscillator Array (ro_array)
+// 2. Ring Oscillator Array with Injection Locking Protection (ro_array)
 // ==============================================================================
 module ro_array #(
     parameter NUM_RO = 8
@@ -86,14 +86,36 @@ module ro_array #(
     output wire [NUM_RO-1:0] ro_bus
 );
 
+    // Injection Locking Protection:
+    // Each ring oscillator is assigned a different prime number of total inverting stages
+    // (1 NAND gate + even number of inverters = odd prime total stages):
+    // RO 0:  4 inverters + 1 NAND =  5 stages (prime)
+    // RO 1:  6 inverters + 1 NAND =  7 stages (prime)
+    // RO 2: 10 inverters + 1 NAND = 11 stages (prime)
+    // RO 3: 12 inverters + 1 NAND = 13 stages (prime)
+    // RO 4: 16 inverters + 1 NAND = 17 stages (prime)
+    // RO 5: 18 inverters + 1 NAND = 19 stages (prime)
+    // RO 6: 22 inverters + 1 NAND = 23 stages (prime)
+    // RO 7: 28 inverters + 1 NAND = 29 stages (prime)
+    function integer get_stages(input integer idx);
+        case (idx)
+            0: get_stages = 4;
+            1: get_stages = 6;
+            2: get_stages = 10;
+            3: get_stages = 12;
+            4: get_stages = 16;
+            5: get_stages = 18;
+            6: get_stages = 22;
+            7: get_stages = 28;
+            default: get_stages = 4 + (idx * 2);
+        endcase
+    endfunction
+
     genvar i;
     generate
         for (i = 0; i < NUM_RO; i = i + 1) begin : RO_ARRAY
-            // Stagger inverter chain lengths (4, 6, 8, 10, 12, 14, 16, 18 inverters)
-            // + 1 NAND gate = 5, 7, 9, 11, 13, 15, 17, 19 total inverting stages
-            // to prevent injection locking and ensure diverse oscillation frequencies.
             ro #(
-                .STAGES(4 + (i * 2))
+                .STAGES(get_stages(i))
             ) ro_inst (
                 .enable(enable),
                 .ro_out(ro_bus[i])
@@ -102,6 +124,7 @@ module ro_array #(
     endgenerate
 
 endmodule
+
 
 
 // ==============================================================================
@@ -466,3 +489,32 @@ module tt_um_pradeepz01_trng (
     wire _unused = &{1'b0, ui_in[7:1], uio_in, 1'b0};
 
 endmodule
+
+
+// ==============================================================================
+// 10. Tiny Tapeout Top Alias (tt_um_trng)
+// ==============================================================================
+module tt_um_trng (
+    input  wire [7:0] ui_in,    // Dedicated inputs
+    output wire [7:0] uo_out,   // Dedicated outputs
+    input  wire [7:0] uio_in,   // IOs: Input path
+    output wire [7:0] uio_out,  // IOs: Output path
+    output wire [7:0] uio_oe,   // IOs: Enable path (active high: 0=input, 1=output)
+    input  wire       ena,      // always 1 when the design is powered
+    input  wire       clk,      // clock
+    input  wire       rst_n     // reset_n - low to reset
+);
+
+    tt_um_pradeepz01_trng u_impl (
+        .ui_in(ui_in),
+        .uo_out(uo_out),
+        .uio_in(uio_in),
+        .uio_out(uio_out),
+        .uio_oe(uio_oe),
+        .ena(ena),
+        .clk(clk),
+        .rst_n(rst_n)
+    );
+
+endmodule
+
