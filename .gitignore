@@ -1,0 +1,7 @@
+test/sim_build/
+test/tb.fst
+test/results.xml
+test/gate_level_netlist.v
+test/__pycache__/
+gds_artifacts/
+runs/
