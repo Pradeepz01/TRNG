@@ -1,44 +1,46 @@
-module output_buffer
-(
+module output_buffer #(
+    parameter WIDTH = 8
+)(
     input  wire clk,
     input  wire rst,
 
     input  wire bit_in,
     input  wire valid_in,
 
-    output reg [31:0] random_data,
-    output reg data_valid
+    output reg [WIDTH-1:0] random_data,
+    output reg             data_valid
 );
 
-reg [5:0] bit_count;
+    localparam CNT_WIDTH = (WIDTH > 1) ? $clog2(WIDTH) : 1;
+    reg [CNT_WIDTH-1:0] bit_count;
 
-always @(posedge clk or posedge rst)
-begin
-    if(rst)
+    always @(posedge clk or posedge rst)
     begin
-        random_data <= 32'd0;
-        bit_count   <= 0;
-        data_valid  <= 0;
-    end
-
-    else
-    begin
-        data_valid <= 1'b0;
-
-        if(valid_in)
+        if (rst)
         begin
-            random_data <= {random_data[30:0], bit_in};
+            random_data <= {WIDTH{1'b0}};
+            bit_count   <= {CNT_WIDTH{1'b0}};
+            data_valid  <= 1'b0;
+        end
+        else
+        begin
+            data_valid <= 1'b0;
 
-            if(bit_count == 31)
+            if (valid_in)
             begin
-                bit_count  <= 0;
-                data_valid <= 1'b1;
-            end
+                random_data <= {random_data[WIDTH-2:0], bit_in};
 
-            else
-                bit_count <= bit_count + 1;
+                if (bit_count == (WIDTH - 1))
+                begin
+                    bit_count  <= {CNT_WIDTH{1'b0}};
+                    data_valid <= 1'b1;
+                end
+                else
+                begin
+                    bit_count <= bit_count + 1'b1;
+                end
+            end
         end
     end
-end
 
 endmodule

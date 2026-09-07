@@ -107,25 +107,52 @@ Accumulates N valid (post-corrector, post-health-check) bits and assembles them 
 
 ---
 
-### 8. Top Module
+### 8. Top Module (`tt_um_pradeepz01_trng`)
 
-Wires all of the above modules together into a single synthesizable design, managing clock, reset, and I/O as required by the Tiny Tapeout pinout.
+Wires all pipeline modules together into a complete synthesizable Tiny Tapeout design conforming to the standard TT pinout.
+
+### 📌 Tiny Tapeout Pinout
+
+| Pin | Direction | Signal | Description |
+| :--- | :--- | :--- | :--- |
+| `ui_in[0]` | Input | `enable` | Enables the ring oscillator array (active high) |
+| `ui_in[7:1]`| Input | - | Unused (tied off) |
+| `uo_out[7:0]`| Output | `random_data[7:0]` | 8-bit random byte output |
+| `uio_out[0]`| Output | `data_valid` | High for 1 cycle when a new random byte is available |
+| `uio_out[1]`| Output | `healthy` | Continuous health monitor (1 = healthy, 0 = repetition fault) |
+| `uio_out[2]`| Output | `entropy_mon` | Raw XOR entropy monitor bit (for oscilloscope/probing) |
+| `uio_out[7:3]`| Output | - | Unused (tied to 0) |
+| `clk` | Input | `clk` | System clock (e.g. 50 MHz) |
+| `rst_n` | Input | `rst_n` | Active-low reset |
 
 ---
 
 ## 🛠️ Implementation Notes
 
-- **Target platform:** [Tiny Tapeout](https://tinytapeout.com/) (sky130 PDK)
-- **HDL:** Verilog
-- **Standard cell used for RO:** `sky130_fd_sc_hd__inv_1`
-- **Entropy source:** Gate delay variation across an array of ring oscillators
+- **Target platform:** [Tiny Tapeout](https://tinytapeout.com/) (Sky130 PDK)
+- **HDL:** Verilog-2005 / SystemVerilog
+- **Standard cells used for RO:** `sky130_fd_sc_hd__nand2_1` and `sky130_fd_sc_hd__inv_1` with `(* keep = "true" *)`
+- **Total Silicon Area:** ~184 standard cells (< 20% of a 1x1 TT tile)
+- **Entropy source:** Gate delay variations across 8 staggered ring oscillators (5 to 19 stages)
 
 ---
 
+## 🧪 Simulation & Verification
 
+### Running the Testbench (Icarus Verilog)
+```bash
+iverilog -g2012 -DSIMULATION -o tb_trng.vvp rtl/*.v test/tb_trng.v
+vvp tb_trng.vvp
+```
+
+### Checking ASIC Synthesis (Yosys)
+```bash
+yosys -p "read_liberty -lib /home/pradeep/vsd/OpenLane/pdks/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib; read_verilog rtl/*.v; synth -top tt_um_pradeepz01_trng; check -assert; stat"
+```
 
 ---
 
 ## 📄 License
 
 This project is open-source. See [LICENSE](LICENSE) for details.
+
