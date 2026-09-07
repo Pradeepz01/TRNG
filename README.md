@@ -107,7 +107,7 @@ Accumulates N valid (post-corrector, post-health-check) bits and assembles them 
 
 ---
 
-### 8. Top Module (`tt_um_pradeepz01_trng`)
+### 8. Top Module (`tt_um_trng`)
 
 Wires all pipeline modules together into a complete synthesizable Tiny Tapeout design conforming to the standard TT pinout.
 
@@ -127,27 +127,36 @@ Wires all pipeline modules together into a complete synthesizable Tiny Tapeout d
 
 ---
 
+## 📁 Repository Structure
+
+* **`rtl/project.v`**: Clean, synthesizable ASIC code for tapeout (uses Sky130 primitives).
+* **`rtl/project_sim.v`**: Behavioral simulation model with analog phase jitter for Icarus Verilog testbenches.
+* **`test/tb_trng.v`**: Verification testbench for functional checks and byte verification.
+
+---
+
 ## 🛠️ Implementation Notes
 
 - **Target platform:** [Tiny Tapeout](https://tinytapeout.com/) (Sky130 PDK)
 - **HDL:** Verilog-2005 / SystemVerilog
+- **Top Module:** `tt_um_trng`
 - **Standard cells used for RO:** `sky130_fd_sc_hd__nand2_1` and `sky130_fd_sc_hd__inv_1` with `(* keep = "true" *)`
-- **Total Silicon Area:** ~184 standard cells (< 20% of a 1x1 TT tile)
-- **Entropy source:** Gate delay variations across 8 staggered ring oscillators (5 to 19 stages)
+- **Total Silicon Area:** 212 standard cells (< 25% of a 1x1 TT tile)
+- **Injection Locking Protection:** 8 ring oscillators with prime stage counts (5, 7, 11, 13, 17, 19, 23, 29 stages)
 
 ---
 
 ## 🧪 Simulation & Verification
 
-### Running the Testbench (Icarus Verilog)
+### 1. Running the Testbench (Icarus Verilog)
 ```bash
-iverilog -g2012 -DSIMULATION -o tb_trng.vvp rtl/project.v test/tb_trng.v
+iverilog -g2012 rtl/project_sim.v test/tb_trng.v -o tb_trng.vvp
 vvp tb_trng.vvp
 ```
 
-### Checking ASIC Synthesis (Yosys)
+### 2. Checking ASIC Synthesis (Yosys)
 ```bash
-yosys -p "read_liberty -lib /home/pradeep/vsd/OpenLane/pdks/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib; read_verilog rtl/project.v; synth -top tt_um_pradeepz01_trng; check -assert; stat"
+yosys -p "read_liberty -lib /home/pradeep/vsd/OpenLane/pdks/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib; read_verilog rtl/project.v; synth -top tt_um_trng; check -assert; stat"
 ```
 
 ---

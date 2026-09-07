@@ -17,7 +17,7 @@ module tb_trng;
     wire [7:0] rand_byte = uo_out;
 
     // Instantiate Tiny Tapeout Top Module
-    tt_um_pradeepz01_trng dut (
+    tt_um_trng dut (
         .ui_in(ui_in),
         .uo_out(uo_out),
         .uio_in(uio_in),

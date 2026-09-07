@@ -1,11 +1,11 @@
 /*
  * =============================================================================
- * True Random Number Generator (TRNG) - Clean ASIC Tapeout Version
- * Target: Tiny Tapeout (SkyWater 130nm)
+ * True Random Number Generator (TRNG) - Behavioral Simulation Version
+ * Purpose: Used for functional verification and testbenches in Icarus Verilog
  * Top Module: tt_um_trng
  *
  * Pipeline Flow:
- * Ring Oscillators -> Entropy Mixer -> Sampler -> Von Neumann -> Health Test -> Output Buffer
+ * Ring Oscillators (simulated jitter) -> Mixer -> Sampler -> Von Neumann -> Health -> Buffer
  * =============================================================================
  */
 
@@ -13,64 +13,47 @@
 `timescale 1ns / 1ps
 
 // =============================================================================
-// 1. Ring Oscillator (ro)
-// A loop of inverters that constantly flips.
-// Uses a 2-input NAND gate as the first stage to turn the oscillator on/off.
+// 1. Ring Oscillator (ro) - Behavioral Simulation Model
+// In digital simulation, zero-delay physical loops cause simulators to hang.
+// Here we model realistic gate delay variation and phase jitter using delays (#).
 // =============================================================================
 module ro #(
-    parameter STAGES = 4 // Number of inverters (must be an even number)
+    parameter STAGES = 4 // Inverter count
 )(
     input  wire enable,  // 1 = running, 0 = stopped
-    output wire ro_out   // High-speed oscillating signal
+    output wire ro_out   // Simulated oscillating signal
 );
 
-    // Total inverting stages = STAGES inverters + 1 NAND gate = odd number.
-    // Odd number of inversions guarantees continuous oscillation when enabled.
-    // (* keep = "true" *) tells the synthesis tool not to delete or merge any gates.
-    (* keep = "true" *) wire [STAGES:0] node;
+    reg sim_clk = 1'b0;
+    integer seed;
+    real jitter;
 
-    // Stage 0: NAND gate for enable control
-    // When enable = 0, node[0] is held at 1 (stops oscillation, saves power)
-    // When enable = 1, it acts like an inverter: node[0] = ~node[STAGES]
-    (* keep = "true" *) sky130_fd_sc_hd__nand2_1 u_nand (
-        .A(enable),
-        .B(node[STAGES]),
-        .Y(node[0])
-    );
+    initial begin
+        // Unique seed for each oscillator based on STAGES
+        seed = 12345 + STAGES * 997;
+    end
 
-    // Stages 1 to STAGES: Chain of inverters
-    genvar i;
-    generate
-        for (i = 0; i < STAGES; i = i + 1) begin : gen_inv
-            (* keep = "true" *) sky130_fd_sc_hd__inv_1 u_inv (
-                .A(node[i]),
-                .Y(node[i+1])
-            );
+    always begin
+        if (enable) begin
+            // Model analog delay + random phase noise/jitter
+            jitter = (1.1 + (STAGES * 0.13)) + (($dist_uniform(seed, -200, 200)) / 1000.0);
+            if (jitter < 0.2) jitter = 0.2;
+            #(jitter);
+            sim_clk <= ~sim_clk;
+        end else begin
+            #1;
+            sim_clk <= 1'b0;
         end
-    endgenerate
+    end
 
-    // Output is taken from the last inverter
-    assign ro_out = node[STAGES];
+    assign ro_out = sim_clk;
 
 endmodule
 
 
 // =============================================================================
-// 2. Ring Oscillator Array (ro_array)
-// Runs 8 ring oscillators in parallel.
-//
-// Injection Locking Defense:
-// If oscillators have the same length, physical coupling on the chip can pull
-// them to the exact same frequency (injection locking).
-// To prevent this, each oscillator uses a different PRIME number of total stages:
-// RO 0:  4 inverters + 1 NAND =  5 stages (prime)
-// RO 1:  6 inverters + 1 NAND =  7 stages (prime)
-// RO 2: 10 inverters + 1 NAND = 11 stages (prime)
-// RO 3: 12 inverters + 1 NAND = 13 stages (prime)
-// RO 4: 16 inverters + 1 NAND = 17 stages (prime)
-// RO 5: 18 inverters + 1 NAND = 19 stages (prime)
-// RO 6: 22 inverters + 1 NAND = 23 stages (prime)
-// RO 7: 28 inverters + 1 NAND = 29 stages (prime)
+// 2. Ring Oscillator Array with Injection Locking Protection (ro_array)
+// Runs 8 ring oscillators, each with a different prime number of stages.
 // =============================================================================
 module ro_array #(
     parameter NUM_RO = 8
@@ -81,14 +64,14 @@ module ro_array #(
 
     function integer get_stages(input integer idx);
         case (idx)
-            0: get_stages = 4;
-            1: get_stages = 6;
-            2: get_stages = 10;
-            3: get_stages = 12;
-            4: get_stages = 16;
-            5: get_stages = 18;
-            6: get_stages = 22;
-            7: get_stages = 28;
+            0: get_stages = 4;  // Total 5 stages (prime)
+            1: get_stages = 6;  // Total 7 stages (prime)
+            2: get_stages = 10; // Total 11 stages (prime)
+            3: get_stages = 12; // Total 13 stages (prime)
+            4: get_stages = 16; // Total 17 stages (prime)
+            5: get_stages = 18; // Total 19 stages (prime)
+            6: get_stages = 22; // Total 23 stages (prime)
+            7: get_stages = 28; // Total 29 stages (prime)
             default: get_stages = 4 + (idx * 2);
         endcase
     endfunction
@@ -110,7 +93,7 @@ endmodule
 
 // =============================================================================
 // 3. Entropy Mixer (entropy_mixer)
-// Combines the 8 oscillator signals into a single entropy bit using an XOR tree.
+// XOR reduction across all 8 oscillators into 1 entropy bit.
 // =============================================================================
 module entropy_mixer #(
     parameter NUM_RO = 8
@@ -119,7 +102,6 @@ module entropy_mixer #(
     output wire              entropy_bit
 );
 
-    // XOR reduction: 1 if an odd number of oscillators are high, 0 otherwise
     assign entropy_bit = ^ro_bus;
 
 endmodule
@@ -127,11 +109,10 @@ endmodule
 
 // =============================================================================
 // 4. Sampler (sampler)
-// Samples the fast, asynchronous entropy bit at a lower system clock rate.
-// Includes a 2-flip-flop synchronizer to prevent metastability.
+// Samples the asynchronous entropy bit with a 2-stage synchronizer.
 // =============================================================================
 module sampler #(
-    parameter DIV = 8 // Sample once every DIV clock cycles
+    parameter DIV = 8
 )(
     input  wire clk,
     input  wire rst,
@@ -141,11 +122,9 @@ module sampler #(
     output reg  valid
 );
 
-    // 2-stage synchronizer: stabilizes asynchronous input into the clk domain
     reg sync_0;
     reg sync_1;
 
-    // Small counter (only 3 bits for DIV = 8, saves area)
     localparam CNT_WIDTH = (DIV > 1) ? $clog2(DIV) : 1;
     reg [CNT_WIDTH-1:0] counter;
 
@@ -157,7 +136,6 @@ module sampler #(
             sampled_bit <= 1'b0;
             valid       <= 1'b0;
         end else begin
-            // Shift through synchronizer
             sync_0 <= entropy_bit;
             sync_1 <= sync_0;
 
@@ -166,7 +144,7 @@ module sampler #(
             if (counter == (DIV - 1)) begin
                 counter     <= {CNT_WIDTH{1'b0}};
                 sampled_bit <= sync_1;
-                valid       <= 1'b1; // Pulse high for 1 cycle when new sample is ready
+                valid       <= 1'b1;
             end else begin
                 counter <= counter + 1'b1;
             end
@@ -178,22 +156,15 @@ endmodule
 
 // =============================================================================
 // 5. Von Neumann Debiasing Corrector (von_neumann)
-// Removes 0/1 bias from physical variations.
-//
-// Algorithm:
-// Takes pairs of consecutive valid bits:
-// - Pair 01 -> Output 1 (valid)
-// - Pair 10 -> Output 0 (valid)
-// - Pair 00 or 11 -> Discard (not valid)
 // =============================================================================
 module von_neumann (
     input  wire clk,
     input  wire rst,
-    input  wire valid_in, // Only read bit_in when this is 1
+    input  wire valid_in,
     input  wire bit_in,
 
     output reg  bit_out,
-    output reg  valid     // Pulses 1 when an unbiased bit is produced
+    output reg  valid
 );
 
     reg first_bit;
@@ -208,14 +179,11 @@ module von_neumann (
         end else begin
             valid <= 1'b0;
 
-            // Only advance the FSM when a brand-new sample arrives
             if (valid_in) begin
                 if (!pair_ready) begin
-                    // Store the first bit of the pair
                     first_bit  <= bit_in;
                     pair_ready <= 1'b1;
                 end else begin
-                    // Compare with second bit of the pair
                     pair_ready <= 1'b0;
 
                     case ({first_bit, bit_in})
@@ -228,7 +196,6 @@ module von_neumann (
                             valid   <= 1'b1;
                         end
                         default: begin
-                            // 2'b00 or 2'b11: discard both bits
                             valid   <= 1'b0;
                         end
                     endcase
@@ -242,11 +209,9 @@ endmodule
 
 // =============================================================================
 // 6. Health Test Watchdog (health_test)
-// Continuously monitors the random stream for faults (e.g. stuck high/low).
-// Flags an alarm if the same bit repeats LIMIT times in a row.
 // =============================================================================
 module health_test #(
-    parameter LIMIT = 16 // Alarm after 16 consecutive identical bits
+    parameter LIMIT = 16
 )(
     input  wire clk,
     input  wire rst,
@@ -254,7 +219,7 @@ module health_test #(
     input  wire valid,
     input  wire bit_in,
 
-    output reg  healthy  // 1 = Normal/Healthy, 0 = Fault Alarm
+    output reg  healthy
 );
 
     reg previous_bit;
@@ -282,7 +247,6 @@ module health_test #(
                     previous_bit <= bit_in;
                 end
 
-                // If identical bits reach LIMIT, flag alarm
                 if (repeat_count >= (LIMIT - 1)) begin
                     healthy <= 1'b0;
                 end
@@ -295,10 +259,10 @@ endmodule
 
 // =============================================================================
 // 7. Output Buffer (output_buffer)
-// Collects 8 unbiased bits into a full 8-bit random byte for Tiny Tapeout.
+// Collects 8 bits into a random byte.
 // =============================================================================
 module output_buffer #(
-    parameter WIDTH = 8 // 8-bit byte output
+    parameter WIDTH = 8
 )(
     input  wire clk,
     input  wire rst,
@@ -307,7 +271,7 @@ module output_buffer #(
     input  wire valid_in,
 
     output reg [WIDTH-1:0] random_data,
-    output reg             data_valid // Pulses 1 when full byte is ready
+    output reg             data_valid
 );
 
     localparam CNT_WIDTH = (WIDTH > 1) ? $clog2(WIDTH) : 1;
@@ -322,13 +286,11 @@ module output_buffer #(
             data_valid <= 1'b0;
 
             if (valid_in) begin
-                // Shift in the new bit
                 random_data <= {random_data[WIDTH-2:0], bit_in};
 
-                // Check if all 8 bits have arrived
                 if (bit_count == (WIDTH - 1)) begin
                     bit_count  <= {CNT_WIDTH{1'b0}};
-                    data_valid <= 1'b1; // Complete 8-bit byte ready!
+                    data_valid <= 1'b1;
                 end else begin
                     bit_count <= bit_count + 1'b1;
                 end
@@ -341,7 +303,6 @@ endmodule
 
 // =============================================================================
 // 8. TRNG Core (trng_top)
-// Wires all pipeline stages together.
 // =============================================================================
 module trng_top #(
     parameter NUM_RO      = 8,
@@ -369,19 +330,16 @@ module trng_top #(
     assign entropy_bit_mon = entropy_bit;
     assign healthy         = is_healthy;
 
-    // 1. Array of Ring Oscillators
     ro_array #(.NUM_RO(NUM_RO)) RO_ARRAY (
         .enable(enable),
         .ro_bus(ro_bus)
     );
 
-    // 2. Entropy Mixer (XOR tree)
     entropy_mixer #(.NUM_RO(NUM_RO)) MIXER (
         .ro_bus(ro_bus),
         .entropy_bit(entropy_bit)
     );
 
-    // 3. Sampler
     sampler #(.DIV(SAMPLER_DIV)) SAMPLER (
         .clk(clk),
         .rst(rst),
@@ -390,7 +348,6 @@ module trng_top #(
         .valid(sample_valid)
     );
 
-    // 4. Von Neumann Debiasing
     von_neumann VN (
         .clk(clk),
         .rst(rst),
@@ -400,7 +357,6 @@ module trng_top #(
         .valid(vn_valid)
     );
 
-    // 5. Health Test Watchdog
     health_test #(.LIMIT(16)) HEALTH (
         .clk(clk),
         .rst(rst),
@@ -409,7 +365,6 @@ module trng_top #(
         .healthy(is_healthy)
     );
 
-    // 6. Output Buffer: gated by health status (blocks output if unhealthy)
     wire buffer_valid_in = vn_valid & is_healthy;
 
     output_buffer #(.WIDTH(DATA_WIDTH)) BUFFER (
@@ -426,7 +381,6 @@ endmodule
 
 // =============================================================================
 // 9. Tiny Tapeout Top Module (tt_um_trng)
-// Standard pinout for Tiny Tapeout.
 // =============================================================================
 module tt_um_trng (
     input  wire [7:0] ui_in,    // Dedicated inputs:  ui_in[0] = enable
@@ -434,15 +388,12 @@ module tt_um_trng (
     input  wire [7:0] uio_in,   // IOs: Input path (unused)
     output wire [7:0] uio_out,  // IOs: Output path
     output wire [7:0] uio_oe,   // IOs: Direction (1=output, 0=input)
-    input  wire       ena,      // Power enable signal (always 1 when chip is active)
-    input  wire       clk,      // System clock (e.g. 50 MHz)
+    input  wire       ena,      // Power enable signal
+    input  wire       clk,      // System clock
     input  wire       rst_n     // Reset (active low: 0 = reset, 1 = run)
 );
 
-    // Active-high reset for internal logic
     wire rst = !rst_n;
-
-    // Enable TRNG only when chip is powered and ui_in[0] is set high
     wire trng_en = ena & ui_in[0];
 
     wire [7:0] random_byte;
@@ -450,7 +401,6 @@ module tt_um_trng (
     wire       healthy;
     wire       entropy_mon;
 
-    // Instantiate TRNG core
     trng_top #(
         .NUM_RO(8),
         .SAMPLER_DIV(8),
@@ -465,24 +415,15 @@ module tt_um_trng (
         .entropy_bit_mon(entropy_mon)
     );
 
-    // Pin connections:
-    // Dedicated outputs: random byte
     assign uo_out = random_byte;
 
-    // Bidirectional IO outputs:
-    // uio_out[0]: byte_valid pulse (high for 1 cycle when random byte is ready)
-    // uio_out[1]: healthy flag (1 = healthy, 0 = error alarm)
-    // uio_out[2]: raw entropy monitor bit (for oscilloscope probing)
-    // uio_out[7:3]: unused (tied to 0)
     assign uio_out[0]   = byte_valid;
     assign uio_out[1]   = healthy;
     assign uio_out[2]   = entropy_mon;
     assign uio_out[7:3] = 5'b00000;
 
-    // Set IO direction: bits 0, 1, 2 are outputs (1), bits 3 to 7 are inputs (0)
     assign uio_oe = 8'b0000_0111;
 
-    // Suppress warnings for unused pins
     wire _unused = &{1'b0, ui_in[7:1], uio_in, 1'b0};
 
 endmodule
