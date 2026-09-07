@@ -1,7 +1,7 @@
 /*
  * ==============================================================================
  * True Random Number Generator (TRNG) for Tiny Tapeout (Sky130)
- * Top Module: tt_um_pradeepz01_trng
+ * Top Module: tt_um_trng
  * 
  * Pipeline:
  * Ring Oscillators -> Entropy Mixer -> Sampler -> Von Neumann -> Health Test -> Output Buffer
