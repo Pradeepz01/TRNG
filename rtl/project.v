@@ -430,9 +430,9 @@ endmodule
 
 
 // ==============================================================================
-// 9. Tiny Tapeout Top Module Wrapper (tt_um_pradeepz01_trng)
+// 9. Tiny Tapeout Top Module Wrapper (tt_um_wrapper_trng)
 // ==============================================================================
-module tt_um_pradeepz01_trng (
+module tt_um_wrapper_trng (
     input  wire [7:0] ui_in,    // Dedicated inputs
     output wire [7:0] uo_out,   // Dedicated outputs
     input  wire [7:0] uio_in,   // IOs: Input path
@@ -505,7 +505,7 @@ module tt_um_trng (
     input  wire       rst_n     // reset_n - low to reset
 );
 
-    tt_um_pradeepz01_trng u_impl (
+    tt_um_wrapper_trng u_impl (
         .ui_in(ui_in),
         .uo_out(uo_out),
         .uio_in(uio_in),
