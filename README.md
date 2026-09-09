@@ -41,15 +41,4 @@ Ring Oscillators (Prime Stages) -> Entropy Mixer -> Sampler -> Von Neumann Corre
 
 ---
 
-## 🧪 Simulation & Verification
 
-### Running the Cocotb Testbench (100 MHz)
-```bash
-cd test
-make -B
-```
-
-### Checking ASIC Synthesis (Yosys + Sky130)
-```bash
-yosys -p "read_liberty -lib /home/pradeep/vsd/OpenLane/pdks/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib; read_verilog src/project.v; synth -top tt_um_trng; check -assert; stat"
-```
